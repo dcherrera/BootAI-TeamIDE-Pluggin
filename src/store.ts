@@ -210,61 +210,31 @@ export const useBootaiStore = defineStore('bootai-chat', () => {
         throw new Error(`HTTP ${res.status}: ${errText}`);
       }
 
+      // Read full response body as text, then parse.
+      // Using res.text() is more robust across Electron/browser environments
+      // than ReadableStream for cross-origin HTTP/1.0 connections.
+      const body = await res.text();
       const contentType = res.headers.get('content-type') ?? '';
-      const isStreamResponse = contentType.includes('text/event-stream') || contentType.includes('text/plain; charset=utf-8');
 
-      if (isStreamResponse && res.body) {
-        // SSE streaming response (OpenAI, Ollama, etc.)
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          if (ac.signal.aborted) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() ?? '';
-
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed || !trimmed.startsWith('data: ')) continue;
-            const data = trimmed.slice(6);
-            if (data === '[DONE]') continue;
-            try {
-              const chunk = JSON.parse(data);
-              const delta = chunk.choices?.[0]?.delta?.content;
-              if (delta) {
-                streamingContent.value += delta;
-                assistantMsg.content = streamingContent.value;
-              }
-            } catch {}
-          }
+      if (contentType.includes('text/event-stream') || body.trimStart().startsWith('data: ')) {
+        // SSE response — parse line by line
+        const lines = body.split('\n');
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || !trimmed.startsWith('data: ')) continue;
+          const data = trimmed.slice(6);
+          if (data === '[DONE]') continue;
+          try {
+            const chunk = JSON.parse(data);
+            const delta = chunk.choices?.[0]?.delta?.content;
+            if (delta) {
+              streamingContent.value += delta;
+              assistantMsg.content = streamingContent.value;
+            }
+          } catch {}
         }
       } else {
-        // Non-streaming JSON response (BootAI, etc.)
-        // Read body manually chunk-by-chunk to handle slow connections
-        const reader = res.body!.getReader();
-        const decoder = new TextDecoder();
-        let body = '';
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          if (ac.signal.aborted) break;
-          body += decoder.decode(value, { stream: true });
-          // Show partial progress while waiting
-          try {
-            const partial = JSON.parse(body);
-            assistantMsg.content = partial.choices?.[0]?.message?.content ?? '';
-          } catch {
-            // JSON incomplete, keep reading
-          }
-        }
-        body += decoder.decode();
-
+        // Non-streaming JSON response
         try {
           const json = JSON.parse(body);
           assistantMsg.content = json.choices?.[0]?.message?.content ?? '';

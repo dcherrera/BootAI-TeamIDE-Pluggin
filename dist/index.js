@@ -137,7 +137,7 @@ var BootAIChat = (function(vue, pinia) {
       isStreaming.value = false;
     }
     async function sendMessage(content) {
-      var _a, _b, _c, _d, _e, _f, _g, _h, _i;
+      var _a, _b, _c, _d, _e, _f;
       let conv = activeConversation.value;
       if (!conv) conv = newConversation();
       const userMsg = { role: "user", content, timestamp: Date.now() };
@@ -174,54 +174,29 @@ var BootAIChat = (function(vue, pinia) {
           const errText = await res.text();
           throw new Error(`HTTP ${res.status}: ${errText}`);
         }
+        const body = await res.text();
         const contentType = res.headers.get("content-type") ?? "";
-        const isStreamResponse = contentType.includes("text/event-stream") || contentType.includes("text/plain; charset=utf-8");
-        if (isStreamResponse && res.body) {
-          const reader = res.body.getReader();
-          const decoder = new TextDecoder();
-          let buffer = "";
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            if (ac.signal.aborted) break;
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split("\n");
-            buffer = lines.pop() ?? "";
-            for (const line of lines) {
-              const trimmed = line.trim();
-              if (!trimmed || !trimmed.startsWith("data: ")) continue;
-              const data = trimmed.slice(6);
-              if (data === "[DONE]") continue;
-              try {
-                const chunk = JSON.parse(data);
-                const delta = (_c = (_b = (_a = chunk.choices) == null ? void 0 : _a[0]) == null ? void 0 : _b.delta) == null ? void 0 : _c.content;
-                if (delta) {
-                  streamingContent.value += delta;
-                  assistantMsg.content = streamingContent.value;
-                }
-              } catch {
-              }
-            }
-          }
-        } else {
-          const reader = res.body.getReader();
-          const decoder = new TextDecoder();
-          let body = "";
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            if (ac.signal.aborted) break;
-            body += decoder.decode(value, { stream: true });
+        if (contentType.includes("text/event-stream") || body.trimStart().startsWith("data: ")) {
+          const lines = body.split("\n");
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || !trimmed.startsWith("data: ")) continue;
+            const data = trimmed.slice(6);
+            if (data === "[DONE]") continue;
             try {
-              const partial = JSON.parse(body);
-              assistantMsg.content = ((_f = (_e = (_d = partial.choices) == null ? void 0 : _d[0]) == null ? void 0 : _e.message) == null ? void 0 : _f.content) ?? "";
+              const chunk = JSON.parse(data);
+              const delta = (_c = (_b = (_a = chunk.choices) == null ? void 0 : _a[0]) == null ? void 0 : _b.delta) == null ? void 0 : _c.content;
+              if (delta) {
+                streamingContent.value += delta;
+                assistantMsg.content = streamingContent.value;
+              }
             } catch {
             }
           }
-          body += decoder.decode();
+        } else {
           try {
             const json = JSON.parse(body);
-            assistantMsg.content = ((_i = (_h = (_g = json.choices) == null ? void 0 : _g[0]) == null ? void 0 : _h.message) == null ? void 0 : _i.content) ?? "";
+            assistantMsg.content = ((_f = (_e = (_d = json.choices) == null ? void 0 : _d[0]) == null ? void 0 : _e.message) == null ? void 0 : _f.content) ?? "";
           } catch {
             assistantMsg.content = body || "[Empty response]";
           }
