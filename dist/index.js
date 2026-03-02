@@ -781,18 +781,18 @@ var BootAIChat = (function(vue, pinia) {
     id: "bootai-chat",
     name: "BootAI Chat",
     icon: "smart_toy",
-    components: {
-      ChatNav,
-      ChatMain,
-      ChatContext
-    },
-    setup() {
+    version: "1.0.0",
+    navigationComponent: ChatNav,
+    mainComponent: ChatMain,
+    contextComponent: ChatContext,
+    order: 50,
+    onRegister() {
       const store = useBootaiStore();
       store.loadFromStorage();
     }
   };
   return index;
 })(Vue, Pinia);
-if (typeof module !== "undefined" && module.exports) {
-  module.exports = BootAIChat;
+if (typeof exports !== "undefined" && BootAIChat && BootAIChat.default) {
+  exports.default = BootAIChat.default;
 }
