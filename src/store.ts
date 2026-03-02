@@ -192,6 +192,7 @@ export const useBootaiStore = defineStore('bootai-chat', () => {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (ep.apiKey) headers['Authorization'] = `Bearer ${ep.apiKey}`;
 
+      const isSSE = ep.url.includes('openai.com') || ep.url.includes('localhost:11434');
       const res = await fetch(url, {
         method: 'POST',
         headers,
@@ -201,7 +202,7 @@ export const useBootaiStore = defineStore('bootai-chat', () => {
           messages: conv.messages.slice(0, -1).map((m) => ({ role: m.role, content: m.content })),
           temperature: ep.temperature,
           max_tokens: ep.maxTokens,
-          stream: true,
+          ...(isSSE ? { stream: true } : {}),
         }),
       });
 
@@ -210,35 +211,44 @@ export const useBootaiStore = defineStore('bootai-chat', () => {
         throw new Error(`HTTP ${res.status}: ${errText}`);
       }
 
-      if (!res.body) throw new Error('No response body');
+      const contentType = res.headers.get('content-type') ?? '';
+      const isStreamResponse = contentType.includes('text/event-stream') || contentType.includes('text/plain; charset=utf-8');
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
+      if (isStreamResponse && res.body) {
+        // SSE streaming response (OpenAI, Ollama, etc.)
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        if (ac.signal.aborted) break;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (ac.signal.aborted) break;
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() ?? '';
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? '';
 
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed || !trimmed.startsWith('data: ')) continue;
-          const data = trimmed.slice(6);
-          if (data === '[DONE]') continue;
-          try {
-            const chunk = JSON.parse(data);
-            const delta = chunk.choices?.[0]?.delta?.content;
-            if (delta) {
-              streamingContent.value += delta;
-              assistantMsg.content = streamingContent.value;
-            }
-          } catch {}
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || !trimmed.startsWith('data: ')) continue;
+            const data = trimmed.slice(6);
+            if (data === '[DONE]') continue;
+            try {
+              const chunk = JSON.parse(data);
+              const delta = chunk.choices?.[0]?.delta?.content;
+              if (delta) {
+                streamingContent.value += delta;
+                assistantMsg.content = streamingContent.value;
+              }
+            } catch {}
+          }
         }
+      } else {
+        // Non-streaming JSON response (BootAI, etc.)
+        const json = await res.json();
+        const content = json.choices?.[0]?.message?.content ?? '';
+        assistantMsg.content = content;
       }
     } catch (err: any) {
       if (err.name === 'AbortError') {
