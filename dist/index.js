@@ -137,7 +137,7 @@ var BootAIChat = (function(vue, pinia) {
       isStreaming.value = false;
     }
     async function sendMessage(content) {
-      var _a, _b, _c, _d, _e, _f;
+      var _a, _b, _c, _d, _e, _f, _g, _h, _i;
       let conv = activeConversation.value;
       if (!conv) conv = newConversation();
       const userMsg = { role: "user", content, timestamp: Date.now() };
@@ -205,9 +205,27 @@ var BootAIChat = (function(vue, pinia) {
             }
           }
         } else {
-          const json = await res.json();
-          const content2 = ((_f = (_e = (_d = json.choices) == null ? void 0 : _d[0]) == null ? void 0 : _e.message) == null ? void 0 : _f.content) ?? "";
-          assistantMsg.content = content2;
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let body = "";
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            if (ac.signal.aborted) break;
+            body += decoder.decode(value, { stream: true });
+            try {
+              const partial = JSON.parse(body);
+              assistantMsg.content = ((_f = (_e = (_d = partial.choices) == null ? void 0 : _d[0]) == null ? void 0 : _e.message) == null ? void 0 : _f.content) ?? "";
+            } catch {
+            }
+          }
+          body += decoder.decode();
+          try {
+            const json = JSON.parse(body);
+            assistantMsg.content = ((_i = (_h = (_g = json.choices) == null ? void 0 : _g[0]) == null ? void 0 : _h.message) == null ? void 0 : _i.content) ?? "";
+          } catch {
+            assistantMsg.content = body || "[Empty response]";
+          }
         }
       } catch (err) {
         if (err.name === "AbortError") {

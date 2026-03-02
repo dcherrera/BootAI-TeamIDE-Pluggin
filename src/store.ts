@@ -246,9 +246,32 @@ export const useBootaiStore = defineStore('bootai-chat', () => {
         }
       } else {
         // Non-streaming JSON response (BootAI, etc.)
-        const json = await res.json();
-        const content = json.choices?.[0]?.message?.content ?? '';
-        assistantMsg.content = content;
+        // Read body manually chunk-by-chunk to handle slow connections
+        const reader = res.body!.getReader();
+        const decoder = new TextDecoder();
+        let body = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (ac.signal.aborted) break;
+          body += decoder.decode(value, { stream: true });
+          // Show partial progress while waiting
+          try {
+            const partial = JSON.parse(body);
+            assistantMsg.content = partial.choices?.[0]?.message?.content ?? '';
+          } catch {
+            // JSON incomplete, keep reading
+          }
+        }
+        body += decoder.decode();
+
+        try {
+          const json = JSON.parse(body);
+          assistantMsg.content = json.choices?.[0]?.message?.content ?? '';
+        } catch {
+          assistantMsg.content = body || '[Empty response]';
+        }
       }
     } catch (err: any) {
       if (err.name === 'AbortError') {
