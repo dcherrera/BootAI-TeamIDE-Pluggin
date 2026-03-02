@@ -20,7 +20,7 @@ var BootAIChat = (function(vue, pinia) {
     return {
       id: "default-bootai",
       name: "Dell E6510",
-      url: "http://192.168.0.101:8080/v1",
+      url: "http://192.168.1.85:8080/v1",
       model: "bootai-smollm2-135m",
       apiKey: "",
       temperature: 0.7,
@@ -158,7 +158,6 @@ var BootAIChat = (function(vue, pinia) {
         const url = `${baseUrl}/chat/completions`;
         const headers = { "Content-Type": "application/json" };
         if (ep.apiKey) headers["Authorization"] = `Bearer ${ep.apiKey}`;
-        const isSSE = ep.url.includes("openai.com") || ep.url.includes("localhost:11434");
         const res = await fetch(url, {
           method: "POST",
           headers,
@@ -168,7 +167,7 @@ var BootAIChat = (function(vue, pinia) {
             messages: conv.messages.slice(0, -1).map((m) => ({ role: m.role, content: m.content })),
             temperature: ep.temperature,
             max_tokens: ep.maxTokens,
-            ...isSSE ? { stream: true } : {}
+            stream: true
           })
         });
         if (!res.ok) {
