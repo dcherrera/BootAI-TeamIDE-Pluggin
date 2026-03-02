@@ -21,8 +21,12 @@ export default defineConfig({
           pinia: 'Pinia',
         },
         footer: `
-          if (typeof exports !== 'undefined' && BootAIChat && BootAIChat.default) {
-            exports.default = BootAIChat.default;
+          if (typeof exports !== 'undefined' && BootAIChat) {
+            exports.default = BootAIChat.default || BootAIChat;
+          }
+          if (typeof module !== 'undefined' && module.exports && BootAIChat) {
+            module.exports = BootAIChat.default || BootAIChat;
+            module.exports.default = BootAIChat.default || BootAIChat;
           }
         `,
       },
