@@ -1,0 +1,13 @@
+{
+  "id": "bootai-chat",
+  "name": "BootAI Chat",
+  "version": "1.0.0",
+  "description": "Chat interface for BootAI and OpenAI-compatible LLM endpoints",
+  "icon": "smart_toy",
+  "entry": "dist/index.js",
+  "components": {
+    "nav": "ChatNav",
+    "main": "ChatMain",
+    "context": "ChatContext"
+  }
+}
